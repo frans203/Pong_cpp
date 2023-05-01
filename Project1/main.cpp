@@ -9,7 +9,6 @@
 #include <GL/glut.h>
 #include <sstream>;
 #pragma comment(lib, "OpenGL32.lib")
-#pragma comment(lib, "winmm.lib")
 //window size and update rate
 int width = 500;
 int height = 550;
@@ -38,12 +37,15 @@ float ball_pos_y = height / 2;
 float ball_dir_x = -1.0f;
 float ball_dir_y = 0.0f;
 int ball_size = 8;
-int ball_speed = 2;
+float ball_speed = 2;
 
 //game
 bool paused = false;
 bool endGame = false;
 int lastKeyPressTime = 0;
+bool keyStates[256] = { false };
+bool secondKeyStates[256] = { false };
+int goalScored = 0;
 
 
 std::string int2str(int x) {
@@ -63,8 +65,49 @@ void vec2_norm(float& x, float& y) {
 	ball_speed = 2;
 }
 
+void setBallPositionLeftRacket() {
+
+	ball_pos_x = racket_left_x + ball_size + racket_width + 10;
+	ball_pos_y = racket_left_y + racket_height / 2 - 1;
+}
+
+void setBallPositionRightRacket() {
+	ball_pos_x = racket_right_x - ball_size - 10;
+	ball_pos_y = racket_right_y + racket_height / 2 - 1;
+}
+
+void onKeyDown(unsigned char key, int x, int y) {
+	keyStates[key] = true;
+}
+
+void onKeyUp(unsigned char key, int x, int y) {
+	keyStates[key] = false;
+}
+
+
+void onSecondDown(int key, int x, int y) {
+	secondKeyStates[key] = true;
+}
+
+void onSecondUp(int key, int x, int y) {
+	secondKeyStates[key] = false;
+}
+
+
 void updateBall() {
 	if (paused) {
+		return;
+	}
+
+	if (goalScored == 1) {
+
+		setBallPositionRightRacket();
+		return;
+	}
+
+	if (goalScored == 2) {
+
+		setBallPositionLeftRacket();
 		return;
 	}
 	ball_pos_x += ball_dir_x * ball_speed;
@@ -78,8 +121,7 @@ void updateBall() {
 		float t = ((ball_pos_y - racket_left_y) / racket_height) - 0.5f;
 		ball_dir_x = fabs(ball_dir_x); //force positive
 		ball_dir_y = t;
-		ball_speed += 0.6;
-		PlaySound(TEXT("collision.wav"), NULL, SND_FILENAME | SND_ASYNC);
+		ball_speed = ball_speed + 0.4;
 	}
 
 	//hit by right racket?
@@ -90,29 +132,29 @@ void updateBall() {
 		float t = ((ball_pos_y - racket_right_y) / racket_height) - 0.5f;
 		ball_dir_x = -fabs(ball_dir_x);
 		ball_dir_y = t;
-		ball_speed += 0.6;
-		PlaySound(TEXT("collision.wav"), NULL, SND_FILENAME | SND_ASYNC );
+		ball_speed = ball_speed + 0.4;
+
 	}
 	//hit left wall?
 	if (ball_pos_x < 0) {
 		++score_right;
-		ball_pos_x = width / 2;
-		ball_pos_y = height / 2;
-		ball_dir_x = fabs(ball_dir_x);
+		ball_speed = 0;
 		ball_dir_y = 0;
-		vec2_norm(ball_dir_x, ball_dir_y); //sets the length of the vector to 1, maintaining speed
-		PlaySound(TEXT("score.wav"), NULL, SND_FILENAME | SND_ASYNC);
+		racket_left_y = height / 2 - racket_height / 2;
+		racket_right_y = height / 2 - racket_height / 2;
+		setBallPositionRightRacket();
+		goalScored = 1;
 	}
 
 	//hit right wall?
 	if (ball_pos_x > width) {
 		++score_left;
-		ball_pos_x = width / 2;
-		ball_pos_y = height / 2;
-		ball_dir_x = -fabs(ball_dir_x);
+		ball_speed = 0;
 		ball_dir_y = 0;
-		vec2_norm(ball_dir_x, ball_dir_y); //sets the length of the vector to 1, maintaining speed
-		PlaySound(TEXT("score.wav"), NULL, SND_FILENAME | SND_ASYNC);
+		racket_left_y = height / 2 - racket_height / 2;
+		racket_right_y = height / 2 - racket_height / 2;
+		setBallPositionLeftRacket();
+		goalScored = 2;
 	}
 
 	//hit top wall?
@@ -130,14 +172,14 @@ void updateBall() {
 void keyboard() {
 		int currentTime = glutGet(GLUT_ELAPSED_TIME);
 		//left racket
-		if (GetAsyncKeyState(0x57) && !paused) racket_left_y += racket_speed; //verify if the user typed W key
-		if (GetAsyncKeyState(0x53) && !paused) racket_left_y -= racket_speed; //verify if the user typed S key
+		if (keyStates[119] == true && !paused) racket_left_y += racket_speed; //verify if the user typed W key
+		if (keyStates[115] == true && !paused) racket_left_y -= racket_speed; //verify if the user typed S key
 
 		//right racket
-		if (GetAsyncKeyState(VK_UP) && !paused) racket_right_y += racket_speed; //verify if the user typed up key 
-		if (GetAsyncKeyState(VK_DOWN) && !paused) racket_right_y -= racket_speed; //verify if the user typed down key 
+		if (secondKeyStates[101] == true && !paused) racket_right_y += racket_speed; //verify if the user typed up key 
+		if (secondKeyStates[103] == true && !paused) racket_right_y -= racket_speed; //verify if the user typed down key 
 		
-		if (GetAsyncKeyState(VK_SPACE) & 0x8000 && currentTime - lastKeyPressTime > 200) {
+		if (keyStates[32] == true && currentTime - lastKeyPressTime > 200) {
 			paused = !paused;
 			lastKeyPressTime = currentTime;
 			if (endGame) {
@@ -147,8 +189,26 @@ void keyboard() {
 				racket_left_y = height / 2;
 				racket_right_x = width - racket_width - 10;
 				racket_right_y = height / 2;
+				endGame = false;
 			}
 		} 
+
+
+		// goalScored == 1 -> right serve
+		if (keyStates[13] == true && goalScored == 1) {
+			ball_speed = 2;
+			ball_dir_x = -fabs(ball_dir_x); // force it to be negative
+			goalScored = 0;
+			vec2_norm(ball_dir_x, ball_dir_y);
+		}
+
+		// goalScored == 2 -> left serve
+		if (keyStates[13] == true && goalScored == 2) {
+			ball_speed = 2;
+			ball_dir_x = fabs(ball_dir_x); // force it to be positive
+			goalScored = 0;
+			vec2_norm(ball_dir_x, ball_dir_y);
+		}
 
 		
 }
@@ -224,6 +284,13 @@ void draw() {
 
 
 void update(int value) {
+	glutKeyboardFunc(onKeyDown);
+	glutKeyboardUpFunc(onKeyUp);
+
+	glutSpecialFunc(onSecondDown);
+	glutSpecialUpFunc(onSecondUp);
+
+
 	keyboard();
 
 	updateBall();
